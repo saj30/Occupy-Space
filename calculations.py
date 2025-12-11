@@ -90,7 +90,7 @@ def calculate_approaches_by_day():
             approaches.approach_date as date,
             COUNT(*) as approach_count,
             AVG(approaches.miss_distance_km) as avg_distance,
-            AVG(approaches.velocity_kmh) as avg_velocity,
+            AVG(approaches.rel_vel_km_h) as avg_velocity,
             AVG(asteroids.estimated_diameter_max) as avg_size,
             SUM(asteroids.is_potentially_hazardous) as hazardous_count
         FROM approaches
@@ -123,7 +123,7 @@ def calculate_velocity_vs_distance():
     
     query = '''
         SELECT 
-            approaches.velocity_kmh,
+            approaches.rel_vel_km_h AS velocity_kmh,
             approaches.miss_distance_km,
             asteroids.name,
             asteroids.estimated_diameter_max,
@@ -396,6 +396,92 @@ def create_visualization_3(apod_data):
     print("✓ Saved: viz3_apod_content_analysis.png")
     plt.close()
 
+def create_visualization_4(size_data):
+    """
+    VISUALIZATION 4: Asteroid Size Categories vs Hazard Rate
+    
+    Combines:
+      - Bar chart: number of asteroids in each size category
+      - Line plot: percentage of asteroids that are potentially hazardous
+    
+    This helps answer:
+      "Are larger near-Earth asteroids more likely to be classified as hazardous?"
+    """
+    # Safety copy so we don't mutate the original df
+    data = size_data.copy()
+
+    # Compute hazard rate (% hazardous in each size category)
+    # Avoid division by zero just in case
+    data['hazard_rate'] = data.apply(
+        lambda row: (row['hazardous_count'] / row['count'] * 100) if row['count'] > 0 else 0,
+        axis=1
+    )
+
+    # Sort categories by average diameter so the x-axis flows logically
+    data = data.sort_values('avg_diameter')
+
+    fig, ax1 = plt.subplots(figsize=(12, 7))
+
+    # ---- Bars: total asteroids per size category ----
+    bar_positions = range(len(data))
+    bars = ax1.bar(
+        bar_positions,
+        data['count'],
+        color='#4A90E2',
+        alpha=0.8,
+        label='Number of Asteroids'
+    )
+
+    ax1.set_xlabel('Asteroid Size Category', fontsize=12)
+    ax1.set_ylabel('Number of Asteroids', fontsize=12, color='#4A90E2')
+    ax1.tick_params(axis='y', labelcolor='#4A90E2')
+    ax1.set_xticks(bar_positions)
+    ax1.set_xticklabels(data['size_category'], rotation=20, ha='right')
+
+    # Annotate bars with counts
+    for bar in bars:
+        height = bar.get_height()
+        ax1.text(
+            bar.get_x() + bar.get_width() / 2,
+            height,
+            f'{int(height)}',
+            ha='center',
+            va='bottom',
+            fontsize=10
+        )
+
+    # ---- Line: % hazardous (secondary y-axis) ----
+    ax2 = ax1.twinx()
+    ax2.plot(
+        bar_positions,
+        data['hazard_rate'],
+        color='#FF6B6B',
+        marker='o',
+        linewidth=2.5,
+        label='% Potentially Hazardous'
+    )
+    ax2.set_ylabel('% Potentially Hazardous', fontsize=12, color='#FF6B6B')
+    ax2.tick_params(axis='y', labelcolor='#FF6B6B')
+    ax2.set_ylim(0, max(data['hazard_rate'].max() * 1.2, 10))  # some headroom
+
+    # ---- Title and legend ----
+    plt.title(
+        'Asteroid Size vs Hazard Classification\n'
+        '(Counts and % Potentially Hazardous by Size Category)',
+        fontsize=16,
+        fontweight='bold'
+    )
+
+    # Combine legends from both axes
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines + lines2, labels + labels2, loc='upper left')
+
+    plt.tight_layout()
+    plt.savefig('viz4_size_vs_hazard.png', dpi=300, bbox_inches='tight')
+    print("✓ Saved: viz4_size_vs_hazard.png")
+    plt.close()
+    
 def main():
     """
     Main function - runs all calculations and creates all visualizations
@@ -447,6 +533,7 @@ def main():
     create_visualization_1(neo_daily)
     create_visualization_2(velocity_distance)
     create_visualization_3(apod_keywords)
+    create_visualization_4(size_dist)
     
     print("\n" + "=" * 60)
     print("✓ ANALYSIS COMPLETE!")
@@ -455,6 +542,7 @@ def main():
     print("  - viz1_approaches_over_time.png (NEO daily approaches)")
     print("  - viz2_velocity_vs_distance.png (NEO velocity analysis)")
     print("  - viz3_apod_content_analysis.png (APOD content breakdown)")
+    print("  - viz4_size_vs_hazard.png (Asteroid size vs hazard rate)")
     print("\nCheck these files for your project report!")
     print("\n💡 TIP: Run data collection scripts more times for richer visualizations!")
 
