@@ -1,0 +1,98 @@
+OCCUPY SPACE - DATA ANALYSIS & VISUALIZATION RESULTS
+Run timestamp: 2025-12-11 17:33:42
+============================================================
+
+Database Status:
+  Asteroids: 100
+  Approaches: 100
+  APOD Images: 100
+
+============================================================
+DATA DISTRIBUTION ANALYSIS
+============================================================
+
+NEO Approaches Date Range:
+  Earliest: 2024-01-01
+  Latest: 2024-01-08
+  Unique Months: 1
+  Unique Days: 8
+
+APOD Date Range:
+  Earliest: 2024-01-01
+  Latest: 2024-04-09
+  Unique Months: 4
+
+============================================================
+CALCULATION 1: Asteroid Approaches By Day
+============================================================
+      date  approach_count  avg_distance  avg_velocity  avg_size  hazardous_count
+2024-01-01              10  3.156300e+07  47486.890927  0.075833                0
+2024-01-02              15  2.488563e+07  45538.656145  0.256453                3
+2024-01-03              22  4.015796e+07  44975.426072  0.178732                0
+2024-01-04               3  3.701256e+07  71104.787540  0.419491                1
+2024-01-05              12  5.329170e+07  49251.419490  0.152004                0
+2024-01-06              13  4.650040e+07  49531.919547  0.217353                1
+2024-01-07              13  2.502877e+07  45803.691469  0.242686                2
+2024-01-08              12  4.028351e+07  48904.580466  0.220191                2
+
+Total days with approaches: 8
+Average approaches per day: 12.50
+Max approaches in a day: 22
+Days with hazardous asteroids: 5
+
+============================================================
+CALCULATION 2: Velocity vs Miss Distance Analysis
+============================================================
+Total asteroid approaches: 100
+
+Closest 10 approaches:
+ velocity_kmh  miss_distance_km       name  estimated_diameter_max  is_potentially_hazardous
+ 32484.076859      1.209360e+06  (2024 AM)                0.016145                         0
+ 29028.364599      1.452208e+06 (2024 AV2)                0.027928                         0
+ 23938.546621      1.496556e+06 (2024 AL2)                0.019863                         0
+ 43990.457533      1.729962e+06  (2023 YR)                0.062236                         0
+ 47882.582198      2.485481e+06 (2023 YR1)                0.043455                         0
+ 34700.876770      2.680032e+06 (2024 AM3)                0.028447                         0
+ 35581.285513      2.692218e+06 (2024 AH3)                0.043656                         0
+ 34732.883429      3.441305e+06 (2024 AH1)                0.040368                         0
+ 51829.943421      3.719706e+06  (2019 PJ)                0.104241                         0
+ 74999.269000      3.904097e+06 (2019 KK5)                0.164452                         0
+
+Average velocity: 47779.57 km/h
+Average miss distance: 37362089.02 km
+Correlation coefficient: 0.3366
+Hazardous asteroids: 9
+Non-hazardous asteroids: 91
+
+============================================================
+CALCULATION 3: Asteroid Size Distribution & Hazard Analysis
+============================================================
+      size_category  count  avg_diameter  hazardous_count  avg_magnitude
+    Tiny (< 0.1 km)     46      0.046155                0      25.970217
+ Small (0.1-0.5 km)     46      0.238971                5      22.183696
+Medium (0.5-1.0 km)      6      0.786862                2      19.418333
+   Large (> 1.0 km)      2      1.202784                2      18.495000
+
+============================================================
+CALCULATION 4: APOD Space Object Keywords
+============================================================
+Total APOD entries: 100
+Entries mentioning 'asteroid': 2
+Entries mentioning 'meteor': 2
+Entries mentioning 'comet': 7
+Titles about space objects: 7
+
+Total space object mentions: 11
+
+============================================================
+CREATING VISUALIZATIONS
+============================================================
+
+============================================================
+✓ ANALYSIS COMPLETE!
+============================================================
+Generated files:
+  - viz1_approaches_over_time.png (NEO daily approaches)
+  - viz2_velocity_vs_distance.png (NEO velocity analysis)
+  - viz3_apod_content_analysis.png (APOD content breakdown)
+  - viz4_size_vs_hazard.png (Asteroid size vs hazard rate)
