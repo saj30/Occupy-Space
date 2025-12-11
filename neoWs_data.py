@@ -9,8 +9,9 @@ import requests
 import sqlite3
 from datetime import datetime, timedelta
 
-# NASA API key 
+# NASA API key  (PUT YOUR KEY HERE)
 API_KEY = "Me4x3nRxIMDsx1RPwXwfYzuLoIosBLHIt28pMdd5"
+
 BASE_URL_FEED = "https://api.nasa.gov/neo/rest/v1/feed"
 BASE_URL_LOOKUP = "https://api.nasa.gov/neo/rest/v1/neo"
 
@@ -22,13 +23,14 @@ def create_tables():
     Creates tables in the database:
     - asteroids: main asteroid data
     - orbiting_bodies: lookup table to avoid duplicate orbiting body strings
-    - approaches: detailed approach data (FK to asteroids, logical FK to orbiting_bodies)
+    - approach_dates: normalized table of unique approach dates
+    - approaches: detailed approach data (FK to asteroids and approach_dates)
     - orbital_elements: orbital data per asteroid (1–1 with asteroids)
     """
     conn = sqlite3.connect("space_data.db")
     cur = conn.cursor()
 
-    # Main asteroids table
+    # Main asteroids table (one row per NEO)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS asteroids (
             id INTEGER PRIMARY KEY,
@@ -39,9 +41,7 @@ def create_tables():
             estimated_diameter_min REAL,
             estimated_diameter_max REAL,
             is_potentially_hazardous INTEGER,
-            is_sentry_object INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            is_sentry_object INTEGERs
         )
     """)
 
@@ -53,12 +53,21 @@ def create_tables():
         )
     """)
 
-    # Approach data table (linked to asteroids; orbiting_body_id is just an INTEGER)
+    # Normalized date dimension table (one row per unique date)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS approach_dates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            approach_date TEXT UNIQUE
+        )
+    """)
+
+    # Approach data table (linked to asteroids and approach_dates)
+    # NOTE: approach_date_id is the FK, we don't repeat the plain date string here
     cur.execute("""
         CREATE TABLE IF NOT EXISTS approaches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            asteroid_id INTEGER,
-            approach_date TEXT,
+            asteroid_id INTEGER NOT NULL,
+            approach_date_id INTEGER NOT NULL,
             approach_date_full TEXT,
             epoch_close_approach INTEGER,
             rel_vel_km_s REAL,
@@ -69,7 +78,9 @@ def create_tables():
             miss_distance_au REAL,
             miss_distance_miles REAL,
             orbiting_body_id INTEGER,
-            FOREIGN KEY (asteroid_id) REFERENCES asteroids(id)
+            FOREIGN KEY (asteroid_id) REFERENCES asteroids(id),
+            FOREIGN KEY (approach_date_id) REFERENCES approach_dates(id),
+            FOREIGN KEY (orbiting_body_id) REFERENCES orbiting_bodies(id)
         )
     """)
 
@@ -98,24 +109,27 @@ def create_tables():
     conn.close()
 
 
-
-
 # ---------- HELPERS ----------
 
 def get_last_fetch_date():
     """
-    Gets the last date we fetched data for (max approach_date in approaches).
-    Returns None if no data exists yet.
+    Gets the last date we fetched data for.
+    Uses the normalized approach_dates table instead of raw strings in approaches.
+
+    Returns:
+        datetime or None if no data exists yet.
     """
     conn = sqlite3.connect("space_data.db")
     cur = conn.cursor()
 
-    cur.execute("SELECT MAX(approach_date) FROM approaches")
+    # Just look at the dimension table – one row per date
+    cur.execute("SELECT MAX(approach_date) FROM approach_dates")
     result = cur.fetchone()[0]
 
     conn.close()
 
     if result:
+        # approach_date is stored as 'YYYY-MM-DD'
         return datetime.strptime(result, "%Y-%m-%d")
     return None
 
@@ -168,6 +182,23 @@ def as_float_from_dict(d: dict, key: str):
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def get_or_create_approach_date_id(cur, approach_date: str) -> int:
+    """
+    Ensure a row exists in approach_dates for this date and
+    return its integer id.
+    """
+    cur.execute(
+        "INSERT OR IGNORE INTO approach_dates (approach_date) VALUES (?)",
+        (approach_date,),
+    )
+    cur.execute(
+        "SELECT id FROM approach_dates WHERE approach_date = ?",
+        (approach_date,),
+    )
+    row = cur.fetchone()
+    return row[0]
 
 
 # ---------- DATA STORAGE ----------
@@ -272,18 +303,19 @@ def store_neo_data(data):
 
             # Store approach data (can have multiple approaches per asteroid)
             for approach in asteroid.get("close_approach_data", []):
-                approach_date = approach["close_approach_date"]
+                approach_date = approach.get("close_approach_date")
+                approach_date_full = approach.get("close_approach_date_full")
 
-                # Check if this specific approach already exists for that asteroid + date
-                cur.execute(
-                    """
-                    SELECT id FROM approaches 
-                    WHERE asteroid_id = ? AND approach_date = ?
-                    """,
-                    (asteroid_id, approach_date),
-                )
-                if cur.fetchone():
+                # If full isn't present, at least keep the date itself
+                if approach_date_full is None:
+                    approach_date_full = approach_date
+
+                # If somehow approach_date is None, skip this approach
+                if approach_date is None:
                     continue
+
+                # Get or create the date ID in our normalized table
+                approach_date_id = get_or_create_approach_date_id(cur, approach_date)
 
                 rel_vel = approach.get("relative_velocity", {})
                 miss_dist = approach.get("miss_distance", {})
@@ -306,11 +338,27 @@ def store_neo_data(data):
                         )
                         orbiting_body_id = cur.lastrowid
 
+                # Check if this specific approach already exists:
+                # same asteroid + same date_id + same full timestamp
+                cur.execute(
+                    """
+                    SELECT id FROM approaches
+                    WHERE asteroid_id = ? 
+                      AND approach_date_id = ?
+                      AND approach_date_full = ?
+                    """,
+                    (asteroid_id, approach_date_id, approach_date_full),
+                )
+                if cur.fetchone():
+                    continue
+
                 cur.execute(
                     """
                     INSERT INTO approaches 
                     (asteroid_id,
-                     approach_date, approach_date_full, epoch_close_approach,
+                     approach_date_id,
+                     approach_date_full,
+                     epoch_close_approach,
                      rel_vel_km_s, rel_vel_km_h, rel_vel_mph,
                      miss_distance_km, miss_distance_lunar,
                      miss_distance_au, miss_distance_miles,
@@ -319,8 +367,8 @@ def store_neo_data(data):
                     """,
                     (
                         asteroid_id,
-                        approach_date,
-                        approach.get("close_approach_date_full"),
+                        approach_date_id,
+                        approach_date_full,
                         approach.get("epoch_date_close_approach"),
                         as_float_from_dict(rel_vel, "kilometers_per_second"),
                         as_float_from_dict(rel_vel, "kilometers_per_hour"),
@@ -388,12 +436,15 @@ def main():
         total_orbital = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM orbiting_bodies")
         total_bodies = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM approach_dates")
+        total_dates = cur.fetchone()[0]
         conn.close()
 
         print(f"Total asteroids in database:       {total_asteroids}")
         print(f"Total approaches in database:      {total_approaches}")
         print(f"Total orbital_elements rows:       {total_orbital}")
         print(f"Total orbiting_bodies (distinct):  {total_bodies}")
+        print(f"Total approach_dates (distinct):   {total_dates}")
         print("\nRun this script again to fetch more data!")
     else:
         print("Failed to fetch data from API")
@@ -403,3 +454,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
